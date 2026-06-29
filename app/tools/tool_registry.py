@@ -8,6 +8,7 @@ from app.tools.patient_tools import (
 from app.tools.appointment_tools import (
     find_appointments,
     schedule_appointment,
+    list_patient_appointments,
     cancel_appointment,
 )
 
@@ -22,6 +23,7 @@ def build_tool_registry():
         "update_patient": update_patient,
         "find_appointments": find_appointments,
         "schedule_appointment": schedule_appointment,
+        "list_patient_appointments": list_patient_appointments,
         "cancel_appointment": cancel_appointment,
         "send_confirmation": send_confirmation,
     }

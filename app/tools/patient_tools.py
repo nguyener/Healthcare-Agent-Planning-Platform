@@ -6,8 +6,9 @@ from app.schemas.patient_schema import (
     RegisterPatientRequest,
     UpdatePatientRequest,
 )
+from app.database import get_connection, init_db, next_external_id, row_to_dict
 
-PATIENTS = {}
+init_db()
 
 
 def validate_patient(**kwargs):
@@ -36,8 +37,17 @@ def validate_patient(**kwargs):
 def search_patient(**kwargs):
     request = SearchPatientRequest(**kwargs)
 
-    key = f"{request.full_name.lower()}::{request.dob}"
-    patient = PATIENTS.get(key)
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT patient_id, full_name, dob, phone, email, state
+            FROM patients
+            WHERE lower(full_name) = lower(?) AND dob = ?
+            """,
+            (request.full_name, request.dob),
+        ).fetchone()
+
+    patient = row_to_dict(row)
 
     return {
         "found": patient is not None,
@@ -54,47 +64,94 @@ def register_patient(**kwargs):
         state=request.state,
     )
 
-    key = f"{request.full_name.lower()}::{request.dob}"
+    with get_connection() as connection:
+        existing = connection.execute(
+            """
+            SELECT patient_id, full_name, dob, phone, email, state
+            FROM patients
+            WHERE lower(full_name) = lower(?) AND dob = ?
+            """,
+            (request.full_name, request.dob),
+        ).fetchone()
 
-    if key in PATIENTS:
-        return {
-            "created": False,
-            "patient": PATIENTS[key],
-            "message": "Patient already exists"
-        }
+        if existing is not None:
+            return {
+                "created": False,
+                "patient": row_to_dict(existing),
+                "message": "Patient already exists"
+            }
 
-    patient = {
-        "patient_id": f"PAT-{len(PATIENTS) + 1:05d}",
-        "full_name": request.full_name,
-        "dob": request.dob,
-        "phone": request.phone,
-        "email": request.email,
-        "state": request.state,
-    }
+        patient_id = next_external_id(connection, "patients", "PAT")
+        connection.execute(
+            """
+            INSERT INTO patients (patient_id, full_name, dob, phone, email, state)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                patient_id,
+                request.full_name,
+                request.dob,
+                request.phone,
+                request.email,
+                request.state,
+            ),
+        )
 
-    PATIENTS[key] = patient
+        row = connection.execute(
+            """
+            SELECT patient_id, full_name, dob, phone, email, state
+            FROM patients
+            WHERE patient_id = ?
+            """,
+            (patient_id,),
+        ).fetchone()
 
     return {
         "created": True,
-        "patient": patient
+        "patient": row_to_dict(row)
     }
 
 
 def update_patient(**kwargs):
     request = UpdatePatientRequest(**kwargs)
 
-    for patient in PATIENTS.values():
-        if patient["patient_id"] == request.patient_id:
-            if request.phone is not None:
-                patient["phone"] = request.phone
-            if request.email is not None:
-                patient["email"] = request.email
-            if request.state is not None:
-                patient["state"] = request.state
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT patient_id, full_name, dob, phone, email, state
+            FROM patients
+            WHERE patient_id = ?
+            """,
+            (request.patient_id,),
+        ).fetchone()
 
-            return {
-                "updated": True,
-                "patient": patient
-            }
+        if row is None:
+            raise ValueError(f"Patient not found: {request.patient_id}")
 
-    raise ValueError(f"Patient not found: {request.patient_id}")
+        patient = row_to_dict(row)
+        phone = request.phone if request.phone is not None else patient["phone"]
+        email = request.email if request.email is not None else patient["email"]
+        state = request.state if request.state is not None else patient["state"]
+
+        connection.execute(
+            """
+            UPDATE patients
+            SET phone = ?, email = ?, state = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE patient_id = ?
+            """,
+            (phone, email, state, request.patient_id),
+        )
+
+        updated = connection.execute(
+            """
+            SELECT patient_id, full_name, dob, phone, email, state
+            FROM patients
+            WHERE patient_id = ?
+            """,
+            (request.patient_id,),
+        ).fetchone()
+
+    return {
+        "updated": True,
+        "patient": row_to_dict(updated)
+    }

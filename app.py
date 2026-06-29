@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 
 from app.agent.agent_service import AgentService
 from app.tools.tool_registry import build_tool_registry
@@ -10,7 +10,7 @@ agent_service = AgentService(build_tool_registry())
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Patient Engagement AI Agent is running."
+    return render_template("index.html")
 
 
 @app.route("/agent/chat", methods=["GET"])
@@ -20,6 +20,7 @@ def agent_chat_info():
     }
 
 @app.route("/agent/chat", methods=["POST"])
+@app.route("/chat", methods=["POST"])
 def agent_chat():
     data = request.get_json() or {}
 

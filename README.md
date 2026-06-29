@@ -170,6 +170,7 @@ The execution engine:
 
 - find_appointments
 - schedule_appointment
+- list_patient_appointments
 - cancel_appointment
 
 ### Notification
@@ -204,7 +205,6 @@ The agent enforces several healthcare-specific rules:
 
 ## Future Enhancements
 
-- SQLite persistence
 - Long-term agent memory
 - Reflection and self-correction
 - Human approval workflow
